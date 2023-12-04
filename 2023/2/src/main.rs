@@ -13,13 +13,18 @@ fn main() -> io::Result<()> {
     let id_regex = Regex::new(r"^Game (\d+)").expect("Invalid regex");
     let colour_regex = Regex::new(r"(\d+)\s(red|green|blue)").expect("Invalid regex");
 
+    let mut allowed_max_for_colour: HashMap<String, i32> = HashMap::new();
+    allowed_max_for_colour.insert("red".to_string(), 12);
+    allowed_max_for_colour.insert("green".to_string(), 13);
+    allowed_max_for_colour.insert("blue".to_string(), 14);
+
     let total: i32 = reader
         .lines()
         .filter_map(|line| {
             if let Ok(line) = line {
                 if let Some(captures) = id_regex.captures(&line) {
                     if let Some(group) = captures.get(1) {
-                        let id: Option<i32> = group.as_str().parse::<i32>().ok();
+                        let id_opt: Option<i32> = group.as_str().parse::<i32>().ok();
                         let max_value_for_colour = colour_regex.captures_iter(&line)
                             .filter_map(|captures| {
                                 let colour = captures.get(2).map(|m| m.as_str().to_string());
@@ -31,11 +36,10 @@ fn main() -> io::Result<()> {
                                 *entry = value.max(*entry);
                                 acc
                             });
-                        println!("{:?}", id);
-                        for (colour, value) in &max_value_for_colour {
-                            println!("{}: {}", colour, value);
-                        }
-                        return id;
+                        let result = max_value_for_colour.iter().all(|(key, value)| {
+                            allowed_max_for_colour.get(key).map_or(true, |&other_value| value <= &other_value)
+                        });
+                        return if result { id_opt } else { None };
                     }
                 }
             }
