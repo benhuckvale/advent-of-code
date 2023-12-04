@@ -1,7 +1,11 @@
 [package]
-name = "sum_games"
+name = "day2"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 regex = "1.10.2"
+
+[[bin]]
+name = "sum_games"
+path = "src/sum_games.rs"
