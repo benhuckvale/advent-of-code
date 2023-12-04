@@ -13,10 +13,13 @@ fn main() -> io::Result<()> {
     let id_regex = Regex::new(r"^Game (\d+)").expect("Invalid regex");
     let colour_regex = Regex::new(r"(\d+)\s(red|green|blue)").expect("Invalid regex");
 
-    let mut allowed_max_for_colour: HashMap<String, i32> = HashMap::new();
-    allowed_max_for_colour.insert("red".to_string(), 12);
-    allowed_max_for_colour.insert("green".to_string(), 13);
-    allowed_max_for_colour.insert("blue".to_string(), 14);
+    let allowed_max_for_colour: HashMap<_, _> = vec![
+        ("red".to_string(), 12),
+        ("green".to_string(), 13),
+        ("blue".to_string(), 14),
+    ]
+    .into_iter()
+    .collect();
 
     let total: i32 = reader
         .lines()
