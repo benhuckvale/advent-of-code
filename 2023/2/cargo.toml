@@ -9,3 +9,7 @@ regex = "1.10.2"
 [[bin]]
 name = "sum_games"
 path = "src/sum_games.rs"
+
+[[bin]]
+name = "sum_powers"
+path = "src/sum_powers.rs"
