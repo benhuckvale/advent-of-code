@@ -1,0 +1,11 @@
+[package]
+name = "day3"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "sum_parts"
+path = "src/sum_parts.rs"
+
+[dependencies]
+itertools = "0.12.0"
