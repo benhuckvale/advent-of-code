@@ -7,5 +7,9 @@ edition = "2021"
 name = "sum_parts"
 path = "src/sum_parts.rs"
 
+[[bin]]
+name = "sum_gears"
+path = "src/sum_gears.rs"
+
 [dependencies]
 itertools = "0.12.0"
