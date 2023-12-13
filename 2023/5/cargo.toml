@@ -1,0 +1,12 @@
+[package]
+name = "day5"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "map_seeds"
+path = "src/map_seeds.rs"
+
+[dependencies]
+indoc = "2.0.4"
+regex = "1.10.2"
