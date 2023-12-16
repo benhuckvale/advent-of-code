@@ -75,5 +75,88 @@ fn main() -> io::Result<()> {
     let key_values = parse_key_values_config(&content);
     dump_key_values(&key_values);
 
+    let mut all_mappings = HashMap::<(String, i32), (String, i32)>::new();
+    let mut start_key = String::new();
+    let mut start_values: Vec<i32> = Vec::new();
+
+    for (key, values) in key_values.iter() {
+        // Define a regex pattern for extracting map names
+        let regex_pattern = r"^(?P<from_map>[^\s]+)-to-(?P<to_map>[^\s]+)\s+map$";
+        let regex = Regex::new(regex_pattern).unwrap();
+        if let Some(captures) = regex.captures(key) {
+            if let (Some(from_map), Some(to_map)) = (captures.name("from_map"), captures.name("to_map")) {
+                // Have the keys, now handle the values
+                for line in values.iter().flat_map(|s| s.split('\n')) {
+                    let parts: Vec<i32> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
+                    let (start1, start2, count) = (parts[0], parts[1], parts[2]);
+                    let from_map_string: String = from_map.as_str().to_string();
+                    let to_map_string: String = to_map.as_str().to_string();
+                    // Decompose range mappings as singular mappings
+                    for i in 0..count {
+                        let j = start2 + i;
+                        let k = start1 + i;
+                        all_mappings.insert((from_map_string.clone(), j), (to_map_string.clone(), k));
+                    }
+                    // Store a default mapping:
+                    all_mappings.insert((from_map_string.clone(), -1), (to_map_string.clone(), -1));
+                }
+            }
+        } else {
+            // It is the line with the start values (the seeds)
+            start_values = values
+                .join(" ")
+                .split_whitespace()
+                .map(|s| s.parse().unwrap())
+                .collect();
+            // We should be able to use:
+            //start_key = key.clone();
+            // But 'seeds' is different to 'seed', so we cannot rely on that. Hardcode:
+            start_key = "seed".to_string();
+        }
+    }
+
+    if true {
+        println!("all_mappings: {:?}", all_mappings);
+        println!("start_key: {}", start_key);
+        println!("start_values: {:?}", start_values);
+    }
+
+    const REQUIRED_FINAL_KEY: &str = "location";
+
+    let result: Option<i32> = start_values
+        .into_iter()
+        .flat_map(|start_value| {
+            std::iter::successors(
+                Some((start_key.clone(), start_value)),
+                |(key, value)| {
+                    println!("key: {}, value: {}", key, value);
+                    match all_mappings.get(&(key.clone(), *value)) {
+                        Some(&(ref next_key, next_value)) => Some((next_key.clone(), next_value)),
+                        None => {
+                            match all_mappings.get(&(key.clone(), -1)) {
+                                Some((next_key, _)) => Some((next_key.clone(), *value)),
+                                None => None,
+                            }
+                        }
+                    }
+                }
+            )
+            .last()
+            .and_then(|(final_key, final_value)| {
+                println!("{} {}", final_key, final_value);
+                if final_key == REQUIRED_FINAL_KEY {
+                    Some(final_value)
+                } else {
+                    None
+                }
+            })
+        })
+        .min();
+
+    match result {
+        Some(value) => println!("Lowest: {}", value),
+        None => println!("Lookup failed."),
+    }
+
     Ok(())
 }
