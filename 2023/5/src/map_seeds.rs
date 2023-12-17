@@ -128,7 +128,7 @@ fn main() -> io::Result<()> {
     let file_path = &args[1];
     let content: String = read_to_string(file_path).expect("read file");
     let key_values = parse_key_values_config(&content);
-    dump_key_values(&key_values);
+    //dump_key_values(&key_values);
 
     let mut map: HashMap<String, (String, OffsetIntervalMap)> = HashMap::new();
     let mut start_key = String::new();
@@ -173,7 +173,7 @@ fn main() -> io::Result<()> {
         }
     }
 
-    if true {
+    if false {
         println!("map: {:?}", map);
         println!("start_key: {}", start_key);
         println!("start_values: {:?}", start_values);
@@ -182,30 +182,42 @@ fn main() -> io::Result<()> {
     const REQUIRED_FINAL_KEY: &str = "location";
 
     let result: Option<i64> = start_values
-        .into_iter()
-        .flat_map(|start_value| {
-            std::iter::successors(
-                Some((start_key.clone(), start_value)),
-                |(key, value)| {
-                    println!("key: {}, value: {}", key, value);
-                    match map.get(key) {
-                        Some(&(ref next_key, ref offset_map)) => {
-                            Some((next_key.clone(), offset_map.get(*value).unwrap_or_default()))
-                        },
-                        None => None,
+        .chunks_exact(2)
+        .flat_map(|pair| {
+            if let [start, count] = pair {
+                println!("{} {}", start, count);
+                let range = *start..(*start + *count);
+                range.map(|start_value| {
+                    if start_value % 10000000 == 0 {
+                        println!("{}", start_value);
                     }
-                }
-            )
-            .last()
-            .and_then(|(final_key, final_value)| {
-                println!("{} {}", final_key, final_value);
-                if final_key == REQUIRED_FINAL_KEY {
-                    Some(final_value)
-                } else {
-                    None
-                }
-            })
+                    std::iter::successors(
+                        Some((start_key.clone(), start_value)),
+                        |(key, value)| {
+                            //println!("key: {}, value: {}", key, value);
+                            match map.get(key) {
+                                Some(&(ref next_key, ref offset_map)) => {
+                                    Some((next_key.clone(), offset_map.get(*value).unwrap_or_default()))
+                                },
+                                None => None,
+                            }
+                        }
+                    )
+                    .last()
+                    .and_then(|(final_key, final_value)| {
+                        //println!("{} {}", final_key, final_value);
+                        if final_key == REQUIRED_FINAL_KEY {
+                            Some(final_value)
+                        } else {
+                            None
+                        }
+                    })
+                }).min()
+            } else {
+                None
+            }
         })
+        .flatten()
         .min();
 
     match result {
