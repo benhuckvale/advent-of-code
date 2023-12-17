@@ -72,7 +72,7 @@ mod parse_key_values_config_tests {
 
 #[derive(Debug)]
 struct OffsetIntervalMap {
-    intervals: Vec<(Range<i32>, i32)>,
+    intervals: Vec<(Range<i64>, i64)>,
 }
 
 
@@ -81,11 +81,11 @@ impl OffsetIntervalMap {
         OffsetIntervalMap { intervals: Vec::new() }
     }
 
-    fn insert(&mut self, range: Range<i32>, value: i32) {
+    fn insert(&mut self, range: Range<i64>, value: i64) {
         self.intervals.push((range, value));
     }
 
-    fn get(&self, key: i32) -> Option<i32> {
+    fn get(&self, key: i64) -> Option<i64> {
         self.intervals
             .iter()
             .find_map(|(interval, value)| {
@@ -132,7 +132,7 @@ fn main() -> io::Result<()> {
 
     let mut map: HashMap<String, (String, OffsetIntervalMap)> = HashMap::new();
     let mut start_key = String::new();
-    let mut start_values: Vec<i32> = Vec::new();
+    let mut start_values: Vec<i64> = Vec::new();
 
     for (key, values) in key_values.iter() {
         // Define a regex pattern for extracting map names
@@ -146,7 +146,7 @@ fn main() -> io::Result<()> {
 
                 // Have the keys, now handle the values
                 for line in values.iter().flat_map(|s| s.split('\n')) {
-                    let parts: Vec<i32> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
+                    let parts: Vec<i64> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
                     let (start1, start2, count) = (parts[0], parts[1], parts[2]);
                     // Store range mapping:
                     offset_map.insert(start2..start2+count, start1);
@@ -181,7 +181,7 @@ fn main() -> io::Result<()> {
 
     const REQUIRED_FINAL_KEY: &str = "location";
 
-    let result: Option<i32> = start_values
+    let result: Option<i64> = start_values
         .into_iter()
         .flat_map(|start_value| {
             std::iter::successors(
