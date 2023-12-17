@@ -1,5 +1,6 @@
 use std::fs::read_to_string;
 use std::io;
+use std::ops::Range;
 use std::env;
 use regex::Regex;
 use std::collections::HashMap;
@@ -39,7 +40,7 @@ fn dump_key_values(map: &StringStringsMap) {
 }
 
 #[cfg(test)]
-mod tests {
+mod parse_key_values_config_tests {
     use super::*;
     use indoc::indoc;
 
@@ -68,6 +69,60 @@ mod tests {
     }
 }
 
+
+#[derive(Debug)]
+struct OffsetIntervalMap {
+    intervals: Vec<(Range<i32>, i32)>,
+}
+
+
+impl OffsetIntervalMap {
+    fn new() -> Self {
+        OffsetIntervalMap { intervals: Vec::new() }
+    }
+
+    fn insert(&mut self, range: Range<i32>, value: i32) {
+        self.intervals.push((range, value));
+    }
+
+    fn get(&self, key: i32) -> Option<i32> {
+        self.intervals
+            .iter()
+            .find_map(|(interval, value)| {
+                if interval.contains(&key) {
+                    let offset = key - interval.start;
+                    Some(offset + value)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| Some(key))
+    }
+}
+
+
+#[cfg(test)]
+mod offset_interval_map_tests {
+    use super::*;
+
+    #[test]
+    fn test_offset_interval_map() {
+        let mut offset_map = OffsetIntervalMap::new();
+
+        // Add test mappings
+        offset_map.insert(0..5, 10);
+        offset_map.insert(20..30, 50);
+
+        // Test entries within the ranges
+        assert_eq!(offset_map.get(3), Some(13));
+        assert_eq!(offset_map.get(25), Some(55));
+
+        // Test an entry outside the example ranges (using the key itself as default)
+        assert_eq!(offset_map.get(40), Some(40));
+    }
+}
+
+
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let file_path = &args[1];
@@ -75,7 +130,7 @@ fn main() -> io::Result<()> {
     let key_values = parse_key_values_config(&content);
     dump_key_values(&key_values);
 
-    let mut all_mappings = HashMap::<(String, i32), (String, i32)>::new();
+    let mut map: HashMap<String, (String, OffsetIntervalMap)> = HashMap::new();
     let mut start_key = String::new();
     let mut start_values: Vec<i32> = Vec::new();
 
@@ -85,21 +140,24 @@ fn main() -> io::Result<()> {
         let regex = Regex::new(regex_pattern).unwrap();
         if let Some(captures) = regex.captures(key) {
             if let (Some(from_map), Some(to_map)) = (captures.name("from_map"), captures.name("to_map")) {
+                let from_map_string: String = from_map.as_str().to_string();
+                let to_map_string: String = to_map.as_str().to_string();
+                let mut offset_map: OffsetIntervalMap = OffsetIntervalMap::new();
+
                 // Have the keys, now handle the values
                 for line in values.iter().flat_map(|s| s.split('\n')) {
                     let parts: Vec<i32> = line.split_whitespace().map(|s| s.parse().unwrap()).collect();
                     let (start1, start2, count) = (parts[0], parts[1], parts[2]);
-                    let from_map_string: String = from_map.as_str().to_string();
-                    let to_map_string: String = to_map.as_str().to_string();
-                    // Decompose range mappings as singular mappings
-                    for i in 0..count {
-                        let j = start2 + i;
-                        let k = start1 + i;
-                        all_mappings.insert((from_map_string.clone(), j), (to_map_string.clone(), k));
-                    }
-                    // Store a default mapping:
-                    all_mappings.insert((from_map_string.clone(), -1), (to_map_string.clone(), -1));
+                    // Store range mapping:
+                    offset_map.insert(start2..start2+count, start1);
                 }
+
+                map.entry(
+                    from_map_string.clone()
+                ).or_insert(
+                    (to_map_string.clone(), offset_map)
+                );
+ 
             }
         } else {
             // It is the line with the start values (the seeds)
@@ -108,15 +166,15 @@ fn main() -> io::Result<()> {
                 .split_whitespace()
                 .map(|s| s.parse().unwrap())
                 .collect();
-            // We should be able to use:
+            // Would have used:
             //start_key = key.clone();
-            // But 'seeds' is different to 'seed', so we cannot rely on that. Hardcode:
+            // But 'seeds' is different to 'seed', so we cannot rely on that. So have to hardcode:
             start_key = "seed".to_string();
         }
     }
 
     if true {
-        println!("all_mappings: {:?}", all_mappings);
+        println!("map: {:?}", map);
         println!("start_key: {}", start_key);
         println!("start_values: {:?}", start_values);
     }
@@ -130,14 +188,11 @@ fn main() -> io::Result<()> {
                 Some((start_key.clone(), start_value)),
                 |(key, value)| {
                     println!("key: {}, value: {}", key, value);
-                    match all_mappings.get(&(key.clone(), *value)) {
-                        Some(&(ref next_key, next_value)) => Some((next_key.clone(), next_value)),
-                        None => {
-                            match all_mappings.get(&(key.clone(), -1)) {
-                                Some((next_key, _)) => Some((next_key.clone(), *value)),
-                                None => None,
-                            }
-                        }
+                    match map.get(key) {
+                        Some(&(ref next_key, ref offset_map)) => {
+                            Some((next_key.clone(), offset_map.get(*value).unwrap_or_default()))
+                        },
+                        None => None,
                     }
                 }
             )
