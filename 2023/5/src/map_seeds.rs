@@ -192,12 +192,11 @@ fn main() -> io::Result<()> {
                         println!("{}", start_value);
                     }
                     std::iter::successors(
-                        Some((start_key.clone(), start_value)),
-                        |(key, value)| {
-                            //println!("key: {}, value: {}", key, value);
+                        Some((&start_key, start_value)),
+                        |&(key, value)| {
                             match map.get(key) {
                                 Some(&(ref next_key, ref offset_map)) => {
-                                    Some((next_key.clone(), offset_map.get(*value).unwrap_or_default()))
+                                    Some((next_key, offset_map.get(value).unwrap()))
                                 },
                                 None => None,
                             }
@@ -205,7 +204,6 @@ fn main() -> io::Result<()> {
                     )
                     .last()
                     .and_then(|(final_key, final_value)| {
-                        //println!("{} {}", final_key, final_value);
                         if final_key == REQUIRED_FINAL_KEY {
                             Some(final_value)
                         } else {
