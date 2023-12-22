@@ -75,7 +75,6 @@ struct OffsetIntervalMap {
     intervals: Vec<(Range<i64>, i64)>,
 }
 
-
 impl OffsetIntervalMap {
     fn new() -> Self {
         OffsetIntervalMap { intervals: Vec::new() }
@@ -86,17 +85,21 @@ impl OffsetIntervalMap {
     }
 
     fn get(&self, key: i64) -> Option<i64> {
-        self.intervals
-            .iter()
-            .find_map(|(interval, value)| {
-                if interval.contains(&key) {
-                    let offset = key - interval.start;
-                    Some(offset + value)
-                } else {
-                    None
-                }
-            })
-            .or_else(|| Some(key))
+        if let Some((range, value)) = self.intervals.iter().rev().find(|&&(ref r, _)| r.contains(&key)) {
+            Some(value + key - range.start)
+        } else {
+            Some(key)
+        }
+    }
+
+    fn get_with_interval(&self, key: i64) -> Option<(i64, usize)> {
+        if let Some((index, (range, value))) = self.intervals.iter().enumerate().rev().find(|&(_, &(ref r, _))| r.contains(&key)) {
+            // One-based index (sorry Dijkstra)...
+            Some((value + key - range.start, index + 1))
+        } else {
+            // ...because we'll use 0 as the id to indicate no range was matched
+            Some((key, 0))
+        }
     }
 }
 
@@ -110,8 +113,8 @@ mod offset_interval_map_tests {
         let mut offset_map = OffsetIntervalMap::new();
 
         // Add test mappings
-        offset_map.insert(0..5, 10);
-        offset_map.insert(20..30, 50);
+        offset_map.insert(0..5, 10); // which will get id 1
+        offset_map.insert(20..30, 50); //which will get id 2
 
         // Test entries within the ranges
         assert_eq!(offset_map.get(3), Some(13));
@@ -119,9 +122,79 @@ mod offset_interval_map_tests {
 
         // Test an entry outside the example ranges (using the key itself as default)
         assert_eq!(offset_map.get(40), Some(40));
+
+        // Test entries within the ranges using get_with_interval, returning the interval id
+        assert_eq!(offset_map.get_with_interval(3), Some((13, 1)));
+        assert_eq!(offset_map.get_with_interval(25), Some((55, 2)));
+
+        // Test an entry outside the example ranges
+        // which is expecting to return the key itself as default with interval id 0
+        assert_eq!(offset_map.get_with_interval(40), Some((40, 0)));
     }
 }
 
+/*
+ * Computes final successor value and path of interval ids taken to reach it via interval maps given.
+ */
+fn ranges_succession_path(start_key: &str, start_value: i64, map: &HashMap<String, (String, OffsetIntervalMap)>) -> (i64, Vec<i64>) {
+    let mut path = Vec::new();
+    let mut current_key = start_key.to_string();
+    let mut current_value = start_value;
+
+    loop {
+        match map.get(&current_key) {
+            Some(&(ref next_key, ref offset_map)) => {
+                match offset_map.get_with_interval(current_value) {
+                    Some((next_value, index)) => {
+                        path.push(index as i64);
+                        current_key = next_key.clone();
+                        current_value = next_value;
+                    }
+                    None => break (current_value, path),
+                }
+            }
+            None => break (current_value, path),
+        }
+    }
+}
+
+
+/*
+ * Performs binary search to find first value in the range start to end where is_equal(value)
+ * evaluates to False, on the assumption that after that all remaining values in the range
+ * also evaluate to False. Apart from that condition the range does not otherwise have to be
+ * ordered.
+ */
+fn binary_search_first_not_equal<F>(start: i64, end: i64, mut is_equal: F) -> i64
+where
+    F: FnMut(i64) -> bool
+{
+    let mut low = start;
+    let mut high = end;
+
+    while low < high {
+        let mid = low + (high - low) / 2;
+        match is_equal(mid) {
+            true => low = mid + 1,
+            false => high = mid
+        }
+    }
+
+    low
+}
+
+mod binary_search_tests {
+    use super::binary_search_first_not_equal;
+
+    #[test]
+    fn test_binary_search_first_not_equal() {
+        // Test case: Searching for the first element not equal to 2
+        let values = vec![2, 2, 2, 2, 2, 3, 3, 3, 4, 5];
+        let is_equal = |x: i64| values[x as usize] == 2;
+        let result = binary_search_first_not_equal(0, values.len() as i64, is_equal);
+        assert_eq!(result, 5);
+    }
+}
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -187,35 +260,24 @@ fn main() -> io::Result<()> {
             if let [start, count] = pair {
                 println!("{} {}", start, count);
                 let range = *start..(*start + *count);
-                range.map(|start_value| {
-                    if start_value % 10000000 == 0 {
-                        println!("{}", start_value);
-                    }
-                    std::iter::successors(
-                        Some((&start_key, start_value)),
-                        |&(key, value)| {
-                            match map.get(key) {
-                                Some(&(ref next_key, ref offset_map)) => {
-                                    Some((next_key, offset_map.get(value).unwrap()))
-                                },
-                                None => None,
-                            }
-                        }
-                    )
-                    .last()
-                    .and_then(|(final_key, final_value)| {
-                        if final_key == REQUIRED_FINAL_KEY {
-                            Some(final_value)
-                        } else {
-                            None
-                        }
-                    })
-                }).min()
+                let mut results = Vec::new();
+
+                let mut current_start = range.start;
+                while current_start < range.end {
+                    let (final_value, current_path) = ranges_succession_path(&start_key, current_start, &map);
+                    results.push(final_value);
+
+                    current_start = binary_search_first_not_equal(current_start, range.end, |element| {
+                        let (_, path) = ranges_succession_path(&start_key, element, &map);
+                        path == current_path
+                    });
+                }
+
+                Some(results.into_iter().min().unwrap())
             } else {
                 None
             }
         })
-        .flatten()
         .min();
 
     match result {
