@@ -28,10 +28,16 @@ func main() {
     }
 
     let filename = CommandLine.arguments[1]
-    let (column1, column2) = parseFile(filename: filename)
+    var (column1, column2) = parseFile(filename: filename)
     
-    print("Column 1:", column1)
-    print("Column 2:", column2)
+    column1.sort()
+    column2.sort()
+
+    let result = zip(column1, column2)
+        .map { abs($0 - $1) }
+        .reduce(0, +)
+
+    print(result)
 }
 
 main()
